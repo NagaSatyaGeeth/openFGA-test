@@ -1,0 +1,65 @@
+# Render Blueprint for the VLS OpenFGA authority-model spike.
+# Deploy via https://dashboard.render.com/select-repo?type=blueprint (or the
+# "New +" -> "Blueprint" flow), pointing at this repo. Everything below runs
+# on Render's free plan. See README.md for the full click-by-click walkthrough.
+
+envVarGroups:
+  - name: vls-openfga-shared-key
+    envVars:
+      # OpenFGA's own required env var name for its preshared API key.
+      # Both services below include this group, so both see the identical
+      # generated value - the openfga server as its auth key, the web app
+      # as the credential it presents when calling openfga.
+      - key: OPENFGA_AUTHN_PRESHARED_KEYS
+        generateValue: true
+
+databases:
+  - name: vls-openfga-db
+    plan: free
+    databaseName: vls_openfga
+    user: vls_openfga
+
+services:
+  - name: vls-openfga-server
+    type: web
+    runtime: image
+    plan: free
+    region: oregon
+    image:
+      url: ghcr.io/openfga/openfga:latest
+    dockerCommand: run
+    preDeployCommand: migrate
+    healthCheckPath: /healthz
+    envVarGroups:
+      - vls-openfga-shared-key
+    envVars:
+      - key: OPENFGA_DATASTORE_ENGINE
+        value: postgres
+      - key: OPENFGA_DATASTORE_URI
+        fromDatabase:
+          name: vls-openfga-db
+          property: connectionString
+      - key: OPENFGA_PLAYGROUND_ENABLED
+        value: "false"
+      - key: OPENFGA_AUTHN_METHOD
+        value: preshared
+
+  - name: vls-openfga-web
+    type: web
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVarGroups:
+      - vls-openfga-shared-key
+    envVars:
+      - key: OPENFGA_API_URL
+        fromService:
+          name: vls-openfga-server
+          property: hostport
+      - key: OPENFGA_STORE_NAME
+        value: vls-authority-spike
+      - key: PORT
+        value: "4000"

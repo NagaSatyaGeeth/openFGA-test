@@ -1,0 +1,13 @@
+{
+  "name": "vls-openfga-spike-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local dev tooling for the VLS authority model OpenFGA spike (DSL->JSON model build, seeding).",
+  "scripts": {
+    "model:build": "node scripts/dsl2json.js model/model.fga model/model.json",
+    "seed": "node scripts/seed.js"
+  },
+  "devDependencies": {
+    "@openfga/syntax-transformer": "^0.2.2"
+  }
+}

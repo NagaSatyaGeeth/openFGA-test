@@ -1,0 +1,39 @@
+{
+  "employees": [
+    { "id": "alice", "name": "Alice Founder", "role": "founder", "manager": null, "active": true },
+    { "id": "bob", "name": "Bob Admin", "role": "admin", "manager": "alice", "active": true },
+    { "id": "dana", "name": "Dana Director", "role": "director", "manager": "alice", "active": true },
+    { "id": "carol", "name": "Carol HR", "role": "hr_manager", "manager": "bob", "active": true },
+    { "id": "mike", "name": "Mike Manager", "role": "manager", "manager": "bob", "active": true },
+    { "id": "maya", "name": "Maya Manager", "role": "manager", "manager": "bob", "active": true },
+    { "id": "fiona", "name": "Fiona Finance", "role": "finance", "manager": "bob", "active": true },
+    { "id": "erin", "name": "Erin Employee", "role": "employee", "manager": "mike", "active": true },
+    { "id": "evan", "name": "Evan Employee", "role": "employee", "manager": "mike", "active": true },
+    { "id": "zack", "name": "Zack Employee", "role": "employee", "manager": "maya", "active": true }
+  ],
+  "roles": [
+    "founder",
+    "admin",
+    "director",
+    "hr_manager",
+    "manager",
+    "finance",
+    "employee"
+  ],
+  "superuserRoles": ["founder", "admin"],
+  "manageableSets": {
+    "hr_manager": {
+      "scope": "org_wide",
+      "roles": ["employee", "finance", "manager"]
+    },
+    "manager": {
+      "scope": "subtree",
+      "roles": ["employee"]
+    },
+    "director": {
+      "scope": "org_wide",
+      "roles": ["employee", "finance"]
+    }
+  },
+  "assumptionsNote": "The VLS spec explicitly says hr_manager's authority over 'employee' is org-wide ('all scope'). It groups finance+manager into the same hr_manager manageable-set sentence without a hierarchy caveat, so this demo also treats those as org-wide (HR authority over personnel categories, not scoped to a subtree). Director's manageable set (broad-but-not-superuser) was not fully specified by the spec; this demo assumes org-wide authority over employee+finance, excluding manager/hr_manager/director/superuser roles as targets. Both assumptions are called out here so they're easy to challenge/change."
+}

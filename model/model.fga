@@ -1,0 +1,90 @@
+model
+  schema 1.1
+
+# ---------------------------------------------------------------------------
+# type: employee
+#
+# Both actors and targets in an authorization check are "employee" objects.
+# An employee has a direct manager (reports-to edge) and is assigned exactly
+# one "role" object (founder / admin / director / hr_manager / manager /
+# finance / employee).
+# ---------------------------------------------------------------------------
+type employee
+  relations
+    # Direct reports-to edge (one tuple per employee, written by the org-chart
+    # editor action). "manager" here means "reports-to target", NOT the
+    # role called role:manager (job title) defined below - different thing.
+    define manager: [employee]
+
+    # Transitive closure of "manager": reports_to(target, X) is true if X is
+    # target's direct manager, or X manages target's manager, and so on.
+    # This is what lets "subtree" scoped rules (director/manager over their
+    # own reports) bind to an unbounded-depth-but-acyclic org chart.
+    define reports_to: manager or reports_to from manager
+
+    # This employee's role assignment. Tuple direction: (role:R, role, employee:E).
+    define role: [role]
+
+    # -- authority resolution, computed from the employee's role object --
+
+    # Rule 1/2: founder/admin can act on anyone; founder outranks admin.
+    # Resolved entirely by which role objects carry a `superuser_access`
+    # tuple pointing at this employee's role (see seed data / role type).
+    define superuser_managed: superuser_access from role
+
+    # Rule 3/4: role is in actor's manageable set, org-wide scope
+    # (e.g. hr_manager -> employee/finance/manager, director -> employee/finance).
+    define org_wide_role_managed: managed_org_wide_by from role
+
+    # Rule 3/5: role is in actor's manageable set, but ONLY within the
+    # actor's reporting subtree (e.g. manager -> employee).
+    define subtree_role_managed: managed_subtree_by from role
+    define subtree_managed: subtree_role_managed and reports_to
+
+    # Final authority relation combining all three paths.
+    define can_act_on: superuser_managed or org_wide_role_managed or subtree_managed
+
+    # The three UI actions all share the same authority test in the VLS spec
+    # (only hierarchy-editing, modeled separately below on `org`, is special).
+    define deactivate: can_act_on
+    define change_role: can_act_on
+    define manage: can_act_on
+
+# ---------------------------------------------------------------------------
+# type: role
+#
+# One object per role name (role:founder, role:admin, role:director,
+# role:hr_manager, role:manager, role:finance, role:employee). Roles hold
+# "who may act on holders of this role" as relations, seeded as tuples
+# pointing at OTHER roles' assignee-usersets - this is what encodes the
+# founder > admin ranking and each role's manageable set, all in data
+# rather than in the model shape itself.
+# ---------------------------------------------------------------------------
+type role
+  relations
+    # Employees holding this role. Tuple direction: (employee:E, assignee, role:R).
+    define assignee: [employee]
+
+    # Which roles' assignees have blanket ("superuser") access to employees
+    # holding *this* role. role:founder only lists role:founder#assignee;
+    # every other role lists both role:founder#assignee and role:admin#assignee.
+    define superuser_access: [role#assignee]
+
+    # Which roles' assignees may manage employees holding *this* role,
+    # anywhere in the org (no subtree/hierarchy check applied).
+    define managed_org_wide_by: [role#assignee]
+
+    # Which roles' assignees may manage employees holding *this* role,
+    # but only inside their own reporting subtree.
+    define managed_subtree_by: [role#assignee]
+
+# ---------------------------------------------------------------------------
+# type: org
+#
+# Singleton object representing the one VLS org. Rule 6: editing the
+# reports-to hierarchy is a privileged, global action - not scoped to any
+# one target employee, so it does not belong on the `employee` type.
+# ---------------------------------------------------------------------------
+type org
+  relations
+    define hierarchy_editor: [role#assignee]

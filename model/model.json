@@ -1,0 +1,236 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "employee",
+      "relations": {
+        "manager": {
+          "this": {}
+        },
+        "reports_to": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "manager"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "reports_to"
+                  },
+                  "tupleset": {
+                    "relation": "manager"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "role": {
+          "this": {}
+        },
+        "superuser_managed": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "superuser_access"
+            },
+            "tupleset": {
+              "relation": "role"
+            }
+          }
+        },
+        "org_wide_role_managed": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "managed_org_wide_by"
+            },
+            "tupleset": {
+              "relation": "role"
+            }
+          }
+        },
+        "subtree_role_managed": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "managed_subtree_by"
+            },
+            "tupleset": {
+              "relation": "role"
+            }
+          }
+        },
+        "subtree_managed": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "subtree_role_managed"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "reports_to"
+                }
+              }
+            ]
+          }
+        },
+        "can_act_on": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "superuser_managed"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "org_wide_role_managed"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "subtree_managed"
+                }
+              }
+            ]
+          }
+        },
+        "deactivate": {
+          "computedUserset": {
+            "relation": "can_act_on"
+          }
+        },
+        "change_role": {
+          "computedUserset": {
+            "relation": "can_act_on"
+          }
+        },
+        "manage": {
+          "computedUserset": {
+            "relation": "can_act_on"
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "manager": {
+            "directly_related_user_types": [
+              {
+                "type": "employee"
+              }
+            ]
+          },
+          "reports_to": {
+            "directly_related_user_types": []
+          },
+          "role": {
+            "directly_related_user_types": [
+              {
+                "type": "role"
+              }
+            ]
+          },
+          "superuser_managed": {
+            "directly_related_user_types": []
+          },
+          "org_wide_role_managed": {
+            "directly_related_user_types": []
+          },
+          "subtree_role_managed": {
+            "directly_related_user_types": []
+          },
+          "subtree_managed": {
+            "directly_related_user_types": []
+          },
+          "can_act_on": {
+            "directly_related_user_types": []
+          },
+          "deactivate": {
+            "directly_related_user_types": []
+          },
+          "change_role": {
+            "directly_related_user_types": []
+          },
+          "manage": {
+            "directly_related_user_types": []
+          }
+        }
+      }
+    },
+    {
+      "type": "role",
+      "relations": {
+        "assignee": {
+          "this": {}
+        },
+        "superuser_access": {
+          "this": {}
+        },
+        "managed_org_wide_by": {
+          "this": {}
+        },
+        "managed_subtree_by": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "assignee": {
+            "directly_related_user_types": [
+              {
+                "type": "employee"
+              }
+            ]
+          },
+          "superuser_access": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          },
+          "managed_org_wide_by": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          },
+          "managed_subtree_by": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "org",
+      "relations": {
+        "hierarchy_editor": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "hierarchy_editor": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
