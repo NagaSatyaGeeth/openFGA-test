@@ -1,14 +1,13 @@
 # Render Blueprint — one-click deploy of the whole stack on the free tier.
 # Provisions: free Postgres + OpenFGA server (official Docker image) + the app.
 # See README.md for the phone walkthrough.
-
-envVarGroups:
-  - name: openfga-shared-key
-    envVars:
-      # OpenFGA's preshared API key. Both services include this group, so the
-      # server uses it as its auth key and the app presents the same value.
-      - key: OPENFGA_AUTHN_PRESHARED_KEYS
-        generateValue: true
+#
+# Note: the OpenFGA preshared key is a fixed literal shared by both services
+# below (not a generated per-blueprint secret). Render's blueprint validator
+# rejects service-level env-var-group references, which is the only way to
+# share a *generated* secret across services — so for this throwaway demo we
+# use a known literal instead. It only needs both services to agree; there is
+# no real data to protect here.
 
 databases:
   - name: openfga-rbac-db
@@ -28,7 +27,6 @@ services:
     dockerCommand: run
     preDeployCommand: migrate
     healthCheckPath: /healthz
-    envVarGroups: [openfga-shared-key]
     envVars:
       - key: OPENFGA_DATASTORE_ENGINE
         value: postgres
@@ -38,6 +36,8 @@ services:
         value: "false"
       - key: OPENFGA_AUTHN_METHOD
         value: preshared
+      - key: OPENFGA_AUTHN_PRESHARED_KEYS
+        value: openfga-demo-preshared-key-2026
 
   # 2) The demo app (backend + frontend), calls OpenFGA over the private network
   - name: openfga-rbac-app
@@ -48,12 +48,13 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
-    envVarGroups: [openfga-shared-key]
     envVars:
       - key: PORT
         value: "4000"
       - key: OPENFGA_API_URL
         fromService: { name: openfga-server, type: web, property: hostport }
+      - key: OPENFGA_API_KEY
+        value: openfga-demo-preshared-key-2026
       - key: OPENFGA_STORE_NAME
         value: openfga-rbac-demo
       - key: APP_DATABASE_URL
