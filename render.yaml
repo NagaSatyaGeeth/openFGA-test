@@ -16,16 +16,16 @@ databases:
     user: openfga
 
 services:
-  # 1) OpenFGA server (prebuilt Docker image), migrated against free Postgres
+  # 1) OpenFGA server. Built from openfga/Dockerfile (a thin wrapper over the
+  #    official image) so it runs "migrate" then "run" at startup - Render's
+  #    free tier does not allow a preDeployCommand for the migration step.
   - name: openfga-server
     type: web
-    runtime: image
+    runtime: docker
     plan: free
     region: oregon
-    image:
-      url: ghcr.io/openfga/openfga:latest
-    dockerCommand: run
-    preDeployCommand: migrate
+    dockerfilePath: ./openfga/Dockerfile
+    dockerContext: .
     healthCheckPath: /healthz
     envVars:
       - key: OPENFGA_DATASTORE_ENGINE
