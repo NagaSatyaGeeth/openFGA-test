@@ -28,6 +28,16 @@ services:
     dockerContext: .
     healthCheckPath: /healthz
     envVars:
+      # OpenFGA opens 3 ports (2112 metrics, 8080 HTTP API, 8081 gRPC). Render
+      # otherwise auto-picks the metrics port as "primary" and routes health
+      # checks + private traffic there. Pin the primary port to the HTTP API
+      # (8080) and turn the metrics server off so it isn't in the running.
+      - key: PORT
+        value: "8080"
+      - key: OPENFGA_METRICS_ENABLED
+        value: "false"
+      - key: OPENFGA_HTTP_ADDR
+        value: "0.0.0.0:8080"
       - key: OPENFGA_DATASTORE_ENGINE
         value: postgres
       - key: OPENFGA_DATASTORE_URI
