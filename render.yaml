@@ -49,7 +49,11 @@ services:
       - key: OPENFGA_AUTHN_PRESHARED_KEYS
         value: openfga-demo-preshared-key-2026
 
-  # 2) The demo app (backend + frontend), calls OpenFGA over the private network
+  # 2) The demo app (backend + frontend). Calls the OpenFGA server over its
+  #    PUBLIC URL rather than Render's private network: private service-to-
+  #    service DNS proved unreliable on the free tier (ENOTFOUND openfga-server),
+  #    and the app boots resiliently (see server.js) so a cold server never
+  #    crashes it. The server is still protected by the preshared key below.
   - name: openfga-rbac-app
     type: web
     runtime: docker
@@ -61,8 +65,10 @@ services:
     envVars:
       - key: PORT
         value: "4000"
+      # If Render assigned the server a suffixed URL, change this to match the
+      # openfga-server service's real .onrender.com URL (shown on its page).
       - key: OPENFGA_API_URL
-        fromService: { name: openfga-server, type: web, property: hostport }
+        value: https://openfga-server.onrender.com
       - key: OPENFGA_API_KEY
         value: openfga-demo-preshared-key-2026
       - key: OPENFGA_STORE_NAME

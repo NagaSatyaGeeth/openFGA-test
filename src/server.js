@@ -138,6 +138,16 @@ app.use(session({
   cookie: { httpOnly: true, sameSite: "lax", maxAge: 1000 * 60 * 60 * 8 },
 }));
 
+// Readiness gate: the web server binds its port immediately (so Render sees a
+// live service) while OpenFGA is connected + seeded in the background. Until
+// that finishes, API calls return 503 instead of crashing — a cold/slow
+// OpenFGA server (free tier spins down when idle) never takes the app down.
+let READY = false;
+app.use((req, res, next) => {
+  if (READY || !req.path.startsWith("/api/") || req.path === "/api/health") return next();
+  res.status(503).json({ error: "starting up — connecting to OpenFGA, try again in a moment" });
+});
+
 // ---- auth ----
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
@@ -406,16 +416,32 @@ app.post("/api/ac/check", requireAuth, acView, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true, ...fga.ids() }));
+// health is always available (never gated) so Render's health check passes
+// even while OpenFGA is still connecting.
+app.get("/api/health", (req, res) => res.json({ ok: true, ready: READY, ...fga.ids() }));
 
 app.use(express.static(path.join(__dirname, "../public")));
 // SPA fallback for any non-API GET
 app.get(/^(?!\/api\/).*/, (req, res) => res.sendFile(path.join(__dirname, "../public/index.html")));
 
-(async () => {
-  const { storeId, modelId } = await fga.init(modelJson);
-  console.log(`[fga] store=${storeId} model=${modelId}`);
-  const s = await seed(db, fga);
-  console.log(`[seed] ${s.seeded ? `seeded ${s.users} users / ${s.roles} roles` : "existing data, no seed"}`);
-  app.listen(PORT, () => console.log(`openfga-rbac-demo listening on :${PORT}`));
-})().catch((e) => { console.error("fatal on startup:", e); process.exit(1); });
+// Bind the port right away so Render marks the service live; connect to
+// OpenFGA + seed in the background, retrying forever so a not-yet-ready or
+// idle-spun-down OpenFGA server never crashes the app.
+app.listen(PORT, () => console.log(`openfga-rbac-demo listening on :${PORT}`));
+
+(async function boot() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const { storeId, modelId } = await fga.init(modelJson);
+      console.log(`[fga] store=${storeId} model=${modelId}`);
+      const s = await seed(db, fga);
+      console.log(`[seed] ${s.seeded ? `seeded ${s.users} users / ${s.roles} roles` : "existing data, no seed"}`);
+      READY = true;
+      console.log("[ready] app fully initialized");
+      return;
+    } catch (e) {
+      console.error(`[boot] attempt ${attempt} failed: ${e.message} — retrying in 5s`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+})();
