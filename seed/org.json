@@ -1,15 +1,86 @@
 {
+  "demoPassword": "vls-demo-2026",
   "employees": [
-    { "id": "alice", "name": "Alice Founder", "role": "founder", "manager": null, "active": true },
-    { "id": "bob", "name": "Bob Admin", "role": "admin", "manager": "alice", "active": true },
-    { "id": "dana", "name": "Dana Director", "role": "director", "manager": "alice", "active": true },
-    { "id": "carol", "name": "Carol HR", "role": "hr_manager", "manager": "bob", "active": true },
-    { "id": "mike", "name": "Mike Manager", "role": "manager", "manager": "bob", "active": true },
-    { "id": "maya", "name": "Maya Manager", "role": "manager", "manager": "bob", "active": true },
-    { "id": "fiona", "name": "Fiona Finance", "role": "finance", "manager": "bob", "active": true },
-    { "id": "erin", "name": "Erin Employee", "role": "employee", "manager": "mike", "active": true },
-    { "id": "evan", "name": "Evan Employee", "role": "employee", "manager": "mike", "active": true },
-    { "id": "zack", "name": "Zack Employee", "role": "employee", "manager": "maya", "active": true }
+    {
+      "id": "alice",
+      "name": "Alice Founder",
+      "email": "alice@vls-demo.test",
+      "role": "founder",
+      "manager": null,
+      "active": true
+    },
+    {
+      "id": "bob",
+      "name": "Bob Admin",
+      "email": "bob@vls-demo.test",
+      "role": "admin",
+      "manager": "alice",
+      "active": true
+    },
+    {
+      "id": "dana",
+      "name": "Dana Director",
+      "email": "dana@vls-demo.test",
+      "role": "director",
+      "manager": "alice",
+      "active": true
+    },
+    {
+      "id": "carol",
+      "name": "Carol HR",
+      "email": "carol@vls-demo.test",
+      "role": "hr_manager",
+      "manager": "bob",
+      "active": true
+    },
+    {
+      "id": "mike",
+      "name": "Mike Manager",
+      "email": "mike@vls-demo.test",
+      "role": "manager",
+      "manager": "bob",
+      "active": true
+    },
+    {
+      "id": "maya",
+      "name": "Maya Manager",
+      "email": "maya@vls-demo.test",
+      "role": "manager",
+      "manager": "bob",
+      "active": true
+    },
+    {
+      "id": "fiona",
+      "name": "Fiona Finance",
+      "email": "fiona@vls-demo.test",
+      "role": "finance",
+      "manager": "bob",
+      "active": true
+    },
+    {
+      "id": "erin",
+      "name": "Erin Employee",
+      "email": "erin@vls-demo.test",
+      "role": "employee",
+      "manager": "mike",
+      "active": true
+    },
+    {
+      "id": "evan",
+      "name": "Evan Employee",
+      "email": "evan@vls-demo.test",
+      "role": "employee",
+      "manager": "mike",
+      "active": true
+    },
+    {
+      "id": "zack",
+      "name": "Zack Employee",
+      "email": "zack@vls-demo.test",
+      "role": "employee",
+      "manager": "maya",
+      "active": true
+    }
   ],
   "roles": [
     "founder",
@@ -20,19 +91,31 @@
     "finance",
     "employee"
   ],
-  "superuserRoles": ["founder", "admin"],
+  "superuserRoles": [
+    "founder",
+    "admin"
+  ],
   "manageableSets": {
     "hr_manager": {
       "scope": "org_wide",
-      "roles": ["employee", "finance", "manager"]
+      "roles": [
+        "employee",
+        "finance",
+        "manager"
+      ]
     },
     "manager": {
       "scope": "subtree",
-      "roles": ["employee"]
+      "roles": [
+        "employee"
+      ]
     },
     "director": {
       "scope": "org_wide",
-      "roles": ["employee", "finance"]
+      "roles": [
+        "employee",
+        "finance"
+      ]
     }
   },
   "assumptionsNote": "The VLS spec explicitly says hr_manager's authority over 'employee' is org-wide ('all scope'). It groups finance+manager into the same hr_manager manageable-set sentence without a hierarchy caveat, so this demo also treats those as org-wide (HR authority over personnel categories, not scoped to a subtree). Director's manageable set (broad-but-not-superuser) was not fully specified by the spec; this demo assumes org-wide authority over employee+finance, excluding manager/hr_manager/director/superuser roles as targets. Both assumptions are called out here so they're easy to challenge/change.",
@@ -42,8 +125,17 @@
       "name": "Dashboard",
       "description": "Org-wide summary: headcount, open items, activity feed.",
       "common": true,
+      "kind": "overview",
       "access": {
-        "viewer": ["founder", "admin", "director", "hr_manager", "manager", "finance", "employee"]
+        "viewer": [
+          "founder",
+          "admin",
+          "director",
+          "hr_manager",
+          "manager",
+          "finance",
+          "employee"
+        ]
       }
     },
     {
@@ -51,10 +143,21 @@
       "name": "Directory",
       "description": "Employee profiles and contact/org info.",
       "common": true,
+      "kind": "employees_view",
       "access": {
-        "admin": ["founder", "admin"],
-        "editor": ["hr_manager"],
-        "viewer": ["director", "manager", "finance", "employee"]
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "hr_manager"
+        ],
+        "viewer": [
+          "director",
+          "manager",
+          "finance",
+          "employee"
+        ]
       }
     },
     {
@@ -62,31 +165,58 @@
       "name": "Documents & Compliance",
       "description": "Policies, SOPs, compliance artifacts.",
       "common": true,
+      "kind": "dummy",
       "access": {
-        "editor": ["founder", "admin", "hr_manager", "director"],
-        "viewer": ["manager", "finance", "employee"]
+        "editor": [
+          "founder",
+          "admin",
+          "hr_manager",
+          "director"
+        ],
+        "viewer": [
+          "manager",
+          "finance",
+          "employee"
+        ]
       }
     },
     {
       "id": "employees_hr",
-      "name": "Employees & HR",
-      "description": "Employee records, role assignments, onboarding/offboarding.",
+      "name": "Employees",
+      "description": "Employee records, role assignments, onboarding/offboarding (covers HR record-keeping - account/login management lives in the separate Users module below).",
       "common": false,
+      "kind": "employees_view",
       "access": {
-        "admin": ["founder", "admin"],
-        "editor": ["hr_manager"],
-        "viewer": ["director", "manager"]
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "hr_manager"
+        ],
+        "viewer": [
+          "director",
+          "manager"
+        ]
       }
     },
     {
       "id": "payroll_finance",
       "name": "Payroll & Finance",
-      "description": "Compensation, invoices, budget.",
+      "description": "Compensation, budget, payroll runs.",
       "common": false,
+      "kind": "dummy",
       "access": {
-        "admin": ["founder", "admin"],
-        "editor": ["finance"],
-        "viewer": ["hr_manager"]
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "finance"
+        ],
+        "viewer": [
+          "hr_manager"
+        ]
       }
     },
     {
@@ -94,19 +224,154 @@
       "name": "Reports & Analytics",
       "description": "Cross-org reporting and dashboards-of-dashboards.",
       "common": false,
+      "kind": "dummy",
       "access": {
-        "admin": ["founder", "admin"],
-        "editor": ["director"],
-        "viewer": ["hr_manager", "manager", "finance"]
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "director"
+        ],
+        "viewer": [
+          "hr_manager",
+          "manager",
+          "finance"
+        ]
       }
     },
     {
-      "id": "org_settings",
-      "name": "Org Settings",
-      "description": "Hierarchy, role definitions, security/auth config.",
+      "id": "expenses",
+      "name": "Expenses",
+      "description": "Expense claims and reimbursements.",
       "common": false,
+      "kind": "dummy",
       "access": {
-        "admin": ["founder", "admin"]
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "finance"
+        ],
+        "viewer": [
+          "director",
+          "hr_manager",
+          "manager",
+          "employee"
+        ]
+      }
+    },
+    {
+      "id": "invoices",
+      "name": "Invoices",
+      "description": "Customer/vendor invoices and payment status.",
+      "common": false,
+      "kind": "dummy",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "finance"
+        ],
+        "viewer": [
+          "director",
+          "hr_manager"
+        ]
+      }
+    },
+    {
+      "id": "attendance",
+      "name": "Attendance",
+      "description": "Daily attendance and time-off records.",
+      "common": false,
+      "kind": "dummy",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "hr_manager",
+          "manager"
+        ],
+        "viewer": [
+          "director",
+          "employee"
+        ]
+      }
+    },
+    {
+      "id": "appointment_letters",
+      "name": "Appointment Letters",
+      "description": "Generated offer/appointment letters per employee.",
+      "common": false,
+      "kind": "dummy",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "hr_manager"
+        ],
+        "viewer": [
+          "director",
+          "manager",
+          "employee"
+        ]
+      }
+    },
+    {
+      "id": "blockchain",
+      "name": "Blockchain Ledger",
+      "description": "Append-only anchor log (dummy) - deliberately has no Editor grants anywhere: only Admin (config) and Viewer (read the chain) exist, since an append-only ledger isn't something any role \"edits\".",
+      "common": false,
+      "kind": "dummy",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "viewer": [
+          "director",
+          "hr_manager"
+        ]
+      }
+    },
+    {
+      "id": "users",
+      "name": "Users",
+      "description": "Accounts and logins (email + password) - the one module with real CRUD in this spike. Creating a user here also provisions their OpenFGA identity (role + manager tuples) immediately.",
+      "common": false,
+      "kind": "users",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ],
+        "editor": [
+          "hr_manager"
+        ],
+        "viewer": [
+          "director",
+          "manager"
+        ]
+      }
+    },
+    {
+      "id": "openfga_admin",
+      "name": "OpenFGA Dashboard",
+      "description": "The authority-model spike tooling itself (Authority Checks + Permissions Dashboard) - admin-only by default, same as any other module: founder/admin simply hold the only grant tuples for it.",
+      "common": false,
+      "kind": "openfga_admin",
+      "access": {
+        "admin": [
+          "founder",
+          "admin"
+        ]
       }
     }
   ]

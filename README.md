@@ -2,26 +2,58 @@
 
 A standalone evaluation of whether [OpenFGA](https://openfga.dev) can cleanly
 express VLS Suite's authority rules (who can deactivate/change-role/manage
-whom). This is a **spike, not production** — it runs a real OpenFGA server
+whom) *and* everyday module-level permissions across a small multi-module
+app. This is a **spike, not production** — it runs a real OpenFGA server
 (the official `ghcr.io/openfga/openfga` Docker image) backed by real
-Postgres, with a small web UI that calls OpenFGA's own `Check` API directly.
-Nothing here talks to VLS's actual repos, infra, staging, prod, or
-ClinLedger — it's a fresh, separate project.
+Postgres, behind a small Node/Express app with real logins, that calls
+OpenFGA's own `Check` API directly for every access decision. Nothing here
+talks to VLS's actual repos, infra, staging, prod, or ClinLedger — it's a
+fresh, separate project.
+
+It's one website with 13 modules: Dashboard, Directory, Documents &
+Compliance, Employees, Payroll & Finance, Reports & Analytics, Expenses,
+Invoices, Attendance, Appointment Letters, Blockchain Ledger (all dummy-data
+except where noted), **Users** (the one module with real CRUD — add a
+person, set their email + password, and their login + OpenFGA identity are
+both provisioned immediately), and the **OpenFGA Dashboard** itself (the
+Authority Checks + Permissions Dashboard tools from the first version of
+this spike) — which, like every other module, is just a module grant: only
+founder/admin hold `admin` on it, so it's the one page in the sidebar
+nobody else even sees.
 
 ## What's here
 
 ```
 model/model.fga      OpenFGA authorization model (DSL) - the actual test
 model/model.json      ...compiled to the JSON OpenFGA's API accepts
-seed/org.json          Seed org chart: 10 employees, 7 roles, manageable sets
+seed/org.json          Seed org chart, roles, manageable sets, and all 13 modules' access grants
 lib/openfgaClient.js   Shared OpenFGA HTTP client + seeding logic
+lib/db.js              App-level Postgres (users/logins + dummy module records)
 scripts/dsl2json.js     Recompile model.fga -> model.json
 scripts/seed.js         CLI: seed a running OpenFGA store from seed/org.json
 scripts/check.sh        CLI: run one ad-hoc Check against local OpenFGA
-web/                    Node/Express backend + static frontend (the UI)
+web/                    Node/Express backend (sessions, auth, module-gated API) + static frontend
 docker-compose.yml      Local dev stack: Postgres + OpenFGA + web, all real
 render.yaml             Render Blueprint - deploys the same stack for free
 ```
+
+## Logging in
+
+Every seeded account shares one demo password: **`vls-demo-2026`**. Emails
+follow `<id>@vls-demo.test` (`alice@vls-demo.test` = founder,
+`bob@vls-demo.test` = admin, `carol@vls-demo.test` = hr_manager,
+`mike@vls-demo.test` / `maya@vls-demo.test` = manager,
+`fiona@vls-demo.test` = finance, `erin@vls-demo.test` /
+`evan@vls-demo.test` / `zack@vls-demo.test` = employee,
+`dana@vls-demo.test` = director) — see `seed/org.json`. The sidebar only
+ever shows the modules your logged-in role actually has a grant for; try
+logging in as a couple of different roles back to back to see it change.
+
+Auth here is intentionally minimal for a spike: bcrypt-hashed passwords in
+Postgres, `express-session` cookies, server-side module checks on every API
+route (never just client-side nav hiding) — but no email verification, no
+rate limiting, no password-reset flow. Fine for evaluating an authorization
+model; don't reuse this auth layer as-is for anything real.
 
 ## The model, in one paragraph
 
@@ -37,13 +69,22 @@ UI's "Honest assessment" panel for what mapped cleanly vs. what didn't.
 
 A second axis - **modules** (`type module`) - covers "what can each role touch,
 and how far": a standard `admin ⊃ editor ⊃ viewer` permission cascade, seeded
-per role in `seed/org.json`. A few modules (Dashboard, Directory, Documents &
+per role in `seed/org.json`, now covering all 13 modules including Users and
+the OpenFGA Dashboard itself. A few modules (Dashboard, Directory, Documents &
 Compliance) are seeded **common** - every one of the 7 roles gets at least
-Viewer on them - the rest are graded per role, down to Org Settings, which
-only founder/admin can touch at all. The UI's "Permissions Dashboard" tab
-renders this as a role × module matrix, computed entirely from live OpenFGA
-`Check` calls (one representative employee per role, checked admin → editor →
-viewer, most-privileged first) rather than read off the seed file directly.
+Viewer on them - the rest are graded per role, down to the OpenFGA Dashboard,
+which only founder/admin can even see in the sidebar. The UI's "Permissions
+Dashboard" tab (inside the OpenFGA Dashboard module) renders this as a role ×
+module matrix, computed entirely from live OpenFGA `Check` calls (one
+representative employee per role, checked admin → editor → viewer,
+most-privileged first) rather than read off the seed file directly.
+
+Employees themselves are no longer static seed data once the app is running:
+`seed/org.json`'s employee list only *bootstraps* Postgres on first boot.
+From then on, Postgres is the source of truth for who exists, and the Users
+module's create/edit endpoints keep OpenFGA's tuples in sync in real time -
+create a user there and they can log in and appear correctly in the
+Authority Checks tool immediately, no restart needed.
 
 ## Run it locally
 
@@ -101,10 +142,13 @@ above is the safer default and is what I'd recommend on a phone.
 ### Free-tier limits worth knowing before you rely on this
 
 - **Postgres expires 30 days after creation** (Render's free-tier policy),
-  with a 14-day grace period, then it's deleted. Fine for a spike; if you
-  want it to outlive that, say so and I'll either re-seed a fresh free DB or
-  move the stack to Fly.io (its free/hobby Postgres doesn't expire the same
-  way).
+  with a 14-day grace period, then it's deleted. That database now holds
+  more than OpenFGA's own tuples - it's also every login this spike ever
+  creates (under a separate `vls_app` schema, same instance, see
+  `lib/db.js`) - so a fresh account created in the Users module is subject
+  to the same 30-day clock as everything else. Fine for a spike; if you want
+  it to outlive that, say so and I'll either re-seed a fresh free DB or move
+  the stack to Fly.io (its free/hobby Postgres doesn't expire the same way).
 - **Both free web services spin down after 15 minutes idle** and take
   roughly a minute to wake back up on the next request — the first click
   after a while will feel slow, that's expected.
@@ -129,19 +173,25 @@ English rule; hr_manager/director being unable to touch directors/superusers
 falls out for free (those roles just never appear in their manageable-set
 tuples).
 
-Module-level RBAC (Dashboard/Payroll/Org Settings/…) also mapped cleanly: one
-`admin ⊃ editor ⊃ viewer` cascade (three relations, two `or`s) covers every
-module, and "common to all roles" is just a seed-data property (grant Viewer
-to all 7 roles), not a model construct.
+Module-level RBAC (Dashboard/Payroll/Blockchain Ledger/…) also mapped cleanly:
+one `admin ⊃ editor ⊃ viewer` cascade (three relations, two `or`s) covers all
+13 modules including Users and the OpenFGA Dashboard itself, and "common to
+all roles" is just a seed-data property (grant Viewer to all 7 roles), not a
+model construct. Gating an entire admin tool behind one module (`openfga_admin`)
+- "enabled by default for founder/admin" - needed zero special-casing: it's
+exactly the same admin-only pattern as every other module, just pointed at a
+page instead of a data view.
 
 **Awkward / needed workarounds** — every employee needs tuples in *both*
 directions (role→employee and employee→role) purely to support traversal
-both ways; the three UI actions collapse to one relation because the spec
-doesn't differentiate rules per action (would need real modeling work if
-that ever changes); "which rule decided it" isn't a native Check output, so
-the demo fires 3 extra Checks against sub-relations to reconstruct a
-human-readable reason; org-wide vs. subtree-only authority needed two
-separate relations rather than one relation with a scope flag.
+both ways, and the Users module now has to replay that (delete-old,
+write-new) server-side every time someone's role or manager changes; the
+three UI actions collapse to one relation because the spec doesn't
+differentiate rules per action (would need real modeling work if that ever
+changes); "which rule decided it" isn't a native Check output, so the demo
+fires 3 extra Checks against sub-relations to reconstruct a human-readable
+reason; org-wide vs. subtree-only authority needed two separate relations
+rather than one relation with a scope flag.
 
 **OpenFGA cannot express (needs app logic)** — the last-active-superuser /
 org-lockout guard: OpenFGA relations have no cardinality/counting
@@ -149,7 +199,12 @@ primitive, no "is this the last member of a set." The deployed UI
 demonstrates this live — a checkbox forces the scenario, and you can see
 OpenFGA's raw `Check` answer stay ALLOW while an app-side guard (counting
 active superuser tuples outside the ReBAC graph entirely) forces the final
-DENY. Any VLS rule shaped like "at least one X must always exist" or "no
-more than N of Y" has the same limitation, same shape of workaround.
+DENY; the same guard now runs for real when you deactivate someone in the
+Users module. Any VLS rule shaped like "at least one X must always exist" or
+"no more than N of Y" has the same limitation, same shape of workaround.
+Identity and credentials (email, password hash, active flag) live entirely
+outside OpenFGA too, in a plain Postgres table - OpenFGA models
+*authorization*, not authentication, so a login system was always going to
+need its own store no matter how clean the authority model itself is.
 Time-bounded/workflow-state rules weren't in scope here but would likely
 need OpenFGA's Conditions (ABAC-lite/CEL) or the same kind of app-side check.

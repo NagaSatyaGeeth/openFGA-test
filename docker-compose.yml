@@ -52,6 +52,10 @@ services:
       OPENFGA_API_URL: "http://openfga:8080"
       OPENFGA_API_KEY: "vls-demo-local-key"
       PORT: "4000"
+      # Reuses the same Postgres instance/database as OpenFGA itself, under
+      # its own `vls_app` schema - see lib/db.js.
+      APP_DATABASE_URL: "postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable"
+      SESSION_SECRET: "vls-demo-local-session-secret"
     ports:
       - "4000:4000"
 

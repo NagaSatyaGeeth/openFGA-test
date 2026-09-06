@@ -63,3 +63,13 @@ services:
         value: vls-authority-spike
       - key: PORT
         value: "4000"
+      # Reuses the same free Postgres OpenFGA itself runs against (one free
+      # database, not two) - the web app puts its own tables under a
+      # separate `vls_app` schema, so it can never collide with the tables
+      # OpenFGA's own `migrate` step manages. See lib/db.js.
+      - key: APP_DATABASE_URL
+        fromDatabase:
+          name: vls-openfga-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
