@@ -1,210 +1,129 @@
-# VLS Authority Model — OpenFGA Spike
+# OpenFGA RBAC Demo
 
-A standalone evaluation of whether [OpenFGA](https://openfga.dev) can cleanly
-express VLS Suite's authority rules (who can deactivate/change-role/manage
-whom) *and* everyday module-level permissions across a small multi-module
-app. This is a **spike, not production** — it runs a real OpenFGA server
-(the official `ghcr.io/openfga/openfga` Docker image) backed by real
-Postgres, behind a small Node/Express app with real logins, that calls
-OpenFGA's own `Check` API directly for every access decision. Nothing here
-talks to VLS's actual repos, infra, staging, prod, or ClinLedger — it's a
-fresh, separate project.
+A standalone, throwaway evaluation app for exercising what **[OpenFGA](https://openfga.dev)**
+can do for role-and-permission access control. It has a VLS-Suite-shaped set of
+modules (all **dummy data**) so the access control feels real, and every
+allow/deny decision is a **live** call to a real OpenFGA server.
 
-It's one website with 13 modules: Dashboard, Directory, Documents &
-Compliance, Employees, Payroll & Finance, Reports & Analytics, Expenses,
-Invoices, Attendance, Appointment Letters, Blockchain Ledger (all dummy-data
-except where noted), **Users** (the one module with real CRUD — add a
-person, set their email + password, and their login + OpenFGA identity are
-both provisioned immediately), and the **OpenFGA Dashboard** itself (the
-Authority Checks + Permissions Dashboard tools from the first version of
-this spike) — which, like every other module, is just a module grant: only
-founder/admin hold `admin` on it, so it's the one page in the sidebar
-nobody else even sees.
+> Completely separate from any real VLS Suite repo/infra/ClinLedger. Nothing
+> here touches those. This repo (`openFGA-test`) is a dedicated demo sandbox.
 
-## What's here
+## What it does
+
+- **Login** (email + password, sessions; no email-verify / reset — it's a test app).
+- **Users**: create / edit / deactivate accounts, assign a role, set a manager.
+  Creating a user provisions their OpenFGA identity (role + reports-to) instantly.
+- **Employees**: roster with departments, roles, reporting lines.
+- **13 VLS-shaped modules** (Dashboard, Invoices, Expenses, Purchasing/Vendors,
+  Clients, Employees, Offers, Leave, Attendance, Payroll, Users, Roles, Settings)
+  — each gated by OpenFGA: the sidebar item appears only if you can view it, and
+  each Create/Edit/Approve/Delete button is enabled only if you hold the level it needs.
+- **Access Control dashboard** (the centerpiece):
+  - **Access Matrix** — role × module grid; change a dropdown to write the grant to OpenFGA.
+  - **User Grants** — per-user roles + **per-individual module overrides** + live effective access.
+  - **Org Hierarchy** — set who reports to whom (writes `manager` tuples).
+  - **Check Tool** — pick actor + question + target, get a live ALLOW/DENY and *why*.
+
+## How OpenFGA is modelled (`openfga/model.fga`)
 
 ```
-model/model.fga      OpenFGA authorization model (DSL) - the actual test
-model/model.json      ...compiled to the JSON OpenFGA's API accepts
-seed/org.json          Seed org chart, roles, manageable sets, and all 13 modules' access grants
-lib/openfgaClient.js   Shared OpenFGA HTTP client + seeding logic
-lib/db.js              App-level Postgres (users/logins + dummy module records)
-scripts/dsl2json.js     Recompile model.fga -> model.json
-scripts/seed.js         CLI: seed a running OpenFGA store from seed/org.json
-scripts/check.sh        CLI: run one ad-hoc Check against local OpenFGA
-web/                    Node/Express backend (sessions, auth, module-gated API) + static frontend
-docker-compose.yml      Local dev stack: Postgres + OpenFGA + web, all real
-render.yaml             Render Blueprint - deploys the same stack for free
+type user
+  relations
+    define manager: [user]
+    define reports_to: manager or reports_to from manager   # transitive org chart
+
+type role
+  relations
+    define assignee: [user]
+
+type module
+  relations
+    define approver: [user, role#assignee]                  # ← accepts BOTH an
+    define editor:   [user, role#assignee] or approver      #   individual user AND
+    define viewer:   [user, role#assignee] or editor        #   a whole role
 ```
+
+- **Role grant**: tuple `role:finance_manager#assignee → approver → module:invoices`.
+- **Per-individual grant** (override): tuple `user:erin → editor → module:invoices`.
+- **Effective access** = union of the two, resolved by OpenFGA. `approver ⇒ editor ⇒ viewer`.
+- **Role membership**: `user:erin → assignee → role:employee`.
+- **Reporting line**: `user:mike → manager → user:erin`.
+
+### The two correctness properties (explicitly verified)
+
+1. **No boot-time frozen cache — changes reflect instantly.** The app never
+   precomputes a permissions matrix at startup. Nav rendering and every gated
+   route call OpenFGA `Check` **live** per request. Flip a grant in the Access
+   Control dashboard and the very next page load (of any user) reflects it — no
+   restart. *(Verified: granting the `employee` role `viewer` on Clients made a
+   logged-in employee see Clients on the next `/api/me`, with no restart; and an
+   individual override bumped one user's Payroll from `viewer`→`approver` live.)*
+
+2. **Per-individual grants, not just per-role.** Because each module relation is
+   declared `[user, role#assignee]`, you can grant one specific person extra
+   access without touching their role. *(Verified: gave Erin an individual
+   `editor` on Invoices; Evan — same `employee` role — still had no Invoices
+   access, proving the grant is per-person.)*
 
 ## Logging in
 
-Every seeded account shares one demo password: **`vls-demo-2026`**. Emails
-follow `<id>@vls-demo.test` (`alice@vls-demo.test` = founder,
-`bob@vls-demo.test` = admin, `carol@vls-demo.test` = hr_manager,
-`mike@vls-demo.test` / `maya@vls-demo.test` = manager,
-`fiona@vls-demo.test` = finance, `erin@vls-demo.test` /
-`evan@vls-demo.test` / `zack@vls-demo.test` = employee,
-`dana@vls-demo.test` = director) — see `seed/org.json`. The sidebar only
-ever shows the modules your logged-in role actually has a grant for; try
-logging in as a couple of different roles back to back to see it change.
+| Email | Role | Password |
+|-------|------|----------|
+| `admin@demo.test` | Administrator (everything, incl. Access Control) | `Admin@Demo2026` |
+| `fiona@demo.test` | Finance Manager | `Demo@2026` |
+| `harvey@demo.test` | HR Manager | `Demo@2026` |
+| `mike@demo.test` | Manager | `Demo@2026` |
+| `erin@demo.test` / `evan@demo.test` | Employee | `Demo@2026` |
+| `aisha@demo.test` | Auditor (read-only) | `Demo@2026` |
 
-Auth here is intentionally minimal for a spike: bcrypt-hashed passwords in
-Postgres, `express-session` cookies, server-side module checks on every API
-route (never just client-side nav hiding) — but no email verification, no
-rate limiting, no password-reset flow. Fine for evaluating an authorization
-model; don't reuse this auth layer as-is for anything real.
-
-## The model, in one paragraph
-
-Both actors and targets are `employee` objects. Each employee is assigned to
-one `role` object (founder/admin/director/hr_manager/manager/finance/employee)
-via a two-way tuple link. Role objects carry `superuser_access`,
-`managed_org_wide_by`, and `managed_subtree_by` relations, seeded with tuples
-pointing at *other* roles' assignee-usersets — this is what encodes "founder
-outranks admin" and each role's manageable set as **data**, not model logic.
-A recursive `reports_to` relation gives unbounded-depth reporting-subtree
-checks. See `model/model.fga` for the full commented DSL, and the deployed
-UI's "Honest assessment" panel for what mapped cleanly vs. what didn't.
-
-A second axis - **modules** (`type module`) - covers "what can each role touch,
-and how far": a standard `admin ⊃ editor ⊃ viewer` permission cascade, seeded
-per role in `seed/org.json`, now covering all 13 modules including Users and
-the OpenFGA Dashboard itself. A few modules (Dashboard, Directory, Documents &
-Compliance) are seeded **common** - every one of the 7 roles gets at least
-Viewer on them - the rest are graded per role, down to the OpenFGA Dashboard,
-which only founder/admin can even see in the sidebar. The UI's "Permissions
-Dashboard" tab (inside the OpenFGA Dashboard module) renders this as a role ×
-module matrix, computed entirely from live OpenFGA `Check` calls (one
-representative employee per role, checked admin → editor → viewer,
-most-privileged first) rather than read off the seed file directly.
-
-Employees themselves are no longer static seed data once the app is running:
-`seed/org.json`'s employee list only *bootstraps* Postgres on first boot.
-From then on, Postgres is the source of truth for who exists, and the Users
-module's create/edit endpoints keep OpenFGA's tuples in sync in real time -
-create a user there and they can log in and appear correctly in the
-Authority Checks tool immediately, no restart needed.
-
-## Run it locally
+## Run locally
 
 Requires Docker.
 
 ```bash
-docker compose up -d          # Postgres + OpenFGA + web, all real, all local
-open http://localhost:4000    # the UI (self-seeds on first boot)
+docker compose up -d --build      # Postgres + OpenFGA + app, all real
+open http://localhost:4000
 ```
 
-Ad-hoc checks from the CLI once the stack is up:
-```bash
-./scripts/check.sh <actor-id> <relation> <target-id>
-# e.g. ./scripts/check.sh carol manage dana   -> DENY (hr can't touch a director)
-```
+If you change the model: `npm run model:build`. If you change UI classes:
+`npm run css:build` (Tailwind is precompiled to a static `public/vendor/tailwind.css`,
+so there's no build step at deploy time and no runtime CDN dependency).
 
-To edit the model: change `model/model.fga`, run `npm run model:build` to
-recompile `model/model.json`, then restart `docker compose up -d --build web`
-(the web app writes a new model version to OpenFGA on boot automatically).
+## Deploy to Render (free tier) — one click
 
-## Deploy to Render (free)
+The repo has a Render **Blueprint** (`render.yaml`) that provisions, all on the
+free tier: a Postgres database, the OpenFGA server (official Docker image,
+migrated), and this app wired to it over Render's private network.
 
-This repo includes a Render **Blueprint** (`render.yaml`) that provisions,
-on Render's free plan, in one click:
-- a free Postgres instance,
-- the real OpenFGA server (official Docker image), migrated and running against it,
-- this repo's web UI, wired to call OpenFGA over Render's private network.
+**On your phone:**
 
-### What I need from you
+1. Open **[this Deploy link](https://render.com/deploy?repo=https://github.com/NagaSatyaGeeth/openFGA-test/tree/claude/openfga-vls-spike-fdllfb)**.
+2. Log into (or create) a free Render account — email/Google/GitHub. Nothing is shared with anyone.
+3. When asked, let Render read this GitHub repo (`NagaSatyaGeeth/openFGA-test`).
+4. Render shows 3 resources from the blueprint (1 database + 2 web services). Confirm the branch is `claude/openfga-vls-spike-fdllfb` and tap **Apply**.
+5. Wait a few minutes for all three to go live. Open the **`openfga-rbac-app`** service's `…onrender.com` URL — that's the app.
 
-**Nothing you paste to me.** Click this on your phone:
+You never paste any token or key to anyone — the Deploy button uses Render's own
+login in your browser.
 
-**[Deploy to Render](https://render.com/deploy?repo=https://github.com/NagaSatyaGeeth/openFGA-test/tree/claude/openfga-vls-spike-fdllfb)**
+**Free-tier notes:** services sleep after ~15 min idle (first hit after that takes
+~30–60s to wake); free Postgres expires ~30 days after creation. Fine for a demo.
 
-1. It opens Render's dashboard. Log in or create a free Render account (email/Google/GitHub).
-2. Render asks to connect GitHub — grant it access to **just this repo**
-   (`NagaSatyaGeeth/openFGA-test`), not your whole account, if it offers
-   that choice.
-3. Render reads `render.yaml` and shows you the 3 resources it's about to
-   create (2 web services + 1 Postgres db). Confirm the branch is
-   `claude/openfga-vls-spike-fdllfb`, then click **Apply**.
-4. Wait a few minutes for the Postgres instance, the OpenFGA server, and the
-   web app to build and boot (the web app auto-seeds the model + org chart
-   into OpenFGA the first time it starts — no separate seeding step for you).
-5. Open the `vls-openfga-web` service's `.onrender.com` URL — that's the UI.
+## How to test (5-minute tour)
 
-You never hand me or paste anywhere a Render API token, password, or
-deploy key — the button just starts Render's own OAuth login in your
-browser. If you'd rather I drive it directly via Render's API instead of
-you clicking through the dashboard, the only thing that would take is a
-Render **API key** (Account Settings -> API Keys on render.com) pasted here
-— but that grants control over your whole Render account, so the button
-above is the safer default and is what I'd recommend on a phone.
+1. **Log in** as `admin@demo.test`. You'll see every module in the sidebar.
+2. **Create a user**: Users → *New user* → give an email + password + role → Create.
+   Log out, log in as that user → the sidebar reflects exactly their role's access.
+3. **Per-role grant**: Access Control → *Access Matrix* → set (say) `Employee` role →
+   `Clients` = `Viewer`. Any employee sees Clients on their next page load — no restart.
+4. **Per-individual grant**: Access Control → *User Grants* → pick one employee →
+   under *Per-module access* set `Invoices` = `Editor`. Only that person gets it;
+   other employees don't. (This is the per-user override.)
+5. **Org hierarchy**: Access Control → *Org Hierarchy* → set who reports to whom.
+6. **Check tool**: Access Control → *Check Tool* → e.g. actor `mike`, "manages
+   (reports-to) user", target `erin` → ALLOW with the reason. Or actor `erin`,
+   "can approve in module", target `payroll` → DENY with the reason.
 
-### Free-tier limits worth knowing before you rely on this
-
-- **Postgres expires 30 days after creation** (Render's free-tier policy),
-  with a 14-day grace period, then it's deleted. That database now holds
-  more than OpenFGA's own tuples - it's also every login this spike ever
-  creates (under a separate `vls_app` schema, same instance, see
-  `lib/db.js`) - so a fresh account created in the Users module is subject
-  to the same 30-day clock as everything else. Fine for a spike; if you want
-  it to outlive that, say so and I'll either re-seed a fresh free DB or move
-  the stack to Fly.io (its free/hobby Postgres doesn't expire the same way).
-- **Both free web services spin down after 15 minutes idle** and take
-  roughly a minute to wake back up on the next request — the first click
-  after a while will feel slow, that's expected.
-- The OpenFGA server ends up with its own public `.onrender.com` URL too
-  (Render's free plan doesn't offer a plan-free *private-only* service
-  type), but it's protected by a generated preshared API key shared only
-  between the two services via `render.yaml`'s `envVarGroups` — nobody can
-  call it without that key.
-
-## Honest assessment: does OpenFGA fit VLS's authority model?
-
-The deployed UI has a live version of this; summarized:
-
-**Mapped cleanly** — RBAC via role objects; founder-outranks-admin as pure
-tuple data with zero special-cased model logic; manageable sets
-(hr_manager→{employee,finance,manager}, manager→{employee},
-director→{employee,finance}) as role→role tuples, so changing who manages
-whom is a data change, not a model change; unbounded-depth reporting subtree
-via one recursive relation, verified 2+ hops deep against the real server;
-org-wide-vs-subtree scoping as a clean intersection that reads like the
-English rule; hr_manager/director being unable to touch directors/superusers
-falls out for free (those roles just never appear in their manageable-set
-tuples).
-
-Module-level RBAC (Dashboard/Payroll/Blockchain Ledger/…) also mapped cleanly:
-one `admin ⊃ editor ⊃ viewer` cascade (three relations, two `or`s) covers all
-13 modules including Users and the OpenFGA Dashboard itself, and "common to
-all roles" is just a seed-data property (grant Viewer to all 7 roles), not a
-model construct. Gating an entire admin tool behind one module (`openfga_admin`)
-- "enabled by default for founder/admin" - needed zero special-casing: it's
-exactly the same admin-only pattern as every other module, just pointed at a
-page instead of a data view.
-
-**Awkward / needed workarounds** — every employee needs tuples in *both*
-directions (role→employee and employee→role) purely to support traversal
-both ways, and the Users module now has to replay that (delete-old,
-write-new) server-side every time someone's role or manager changes; the
-three UI actions collapse to one relation because the spec doesn't
-differentiate rules per action (would need real modeling work if that ever
-changes); "which rule decided it" isn't a native Check output, so the demo
-fires 3 extra Checks against sub-relations to reconstruct a human-readable
-reason; org-wide vs. subtree-only authority needed two separate relations
-rather than one relation with a scope flag.
-
-**OpenFGA cannot express (needs app logic)** — the last-active-superuser /
-org-lockout guard: OpenFGA relations have no cardinality/counting
-primitive, no "is this the last member of a set." The deployed UI
-demonstrates this live — a checkbox forces the scenario, and you can see
-OpenFGA's raw `Check` answer stay ALLOW while an app-side guard (counting
-active superuser tuples outside the ReBAC graph entirely) forces the final
-DENY; the same guard now runs for real when you deactivate someone in the
-Users module. Any VLS rule shaped like "at least one X must always exist" or
-"no more than N of Y" has the same limitation, same shape of workaround.
-Identity and credentials (email, password hash, active flag) live entirely
-outside OpenFGA too, in a plain Postgres table - OpenFGA models
-*authorization*, not authentication, so a login system was always going to
-need its own store no matter how clean the authority model itself is.
-Time-bounded/workflow-state rules weren't in scope here but would likely
-need OpenFGA's Conditions (ABAC-lite/CEL) or the same kind of app-side check.
+To *see* instant reflection: open the app in two browsers (admin in one, another
+user in the other), change that user's grant as admin, refresh the other — it
+updates with no restart.

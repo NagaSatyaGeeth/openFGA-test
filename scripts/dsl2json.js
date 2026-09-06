@@ -1,12 +1,11 @@
 #!/usr/bin/env node
+// Compiles the OpenFGA DSL model to the JSON the write-authorization-model
+// API accepts. Run: node scripts/dsl2json.js openfga/model.fga openfga/model.json
 const fs = require("fs");
-const path = require("path");
 const { transformer, validator } = require("@openfga/syntax-transformer");
 
-const dslPath = process.argv[2];
-const outPath = process.argv[3];
-
-const dsl = fs.readFileSync(dslPath, "utf8");
+const [, , inPath, outPath] = process.argv;
+const dsl = fs.readFileSync(inPath, "utf8");
 
 const errors = validator.validateDSL(dsl);
 if (errors && errors.length) {
