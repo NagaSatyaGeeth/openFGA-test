@@ -25,6 +25,40 @@ const client = makeClient({ apiUrl: OPENFGA_API_URL, apiKey: OPENFGA_API_KEY });
 
 let storeId = null;
 let modelId = null;
+let permissionsMatrix = null;
+
+// One representative employee per role - Check needs an actual employee
+// subject (module access is granted to role#assignee usersets, not roles
+// directly), so we pick whoever was seeded first under each role.
+const representativeByRole = Object.fromEntries(
+  org.roles.map((role) => [role, org.employees.find((e) => e.role === role)])
+);
+
+const ACCESS_LEVELS = ["admin", "editor", "viewer"]; // checked in this order, most-privileged first
+
+async function computePermissionsMatrix() {
+  const matrix = {};
+  for (const role of org.roles) {
+    const rep = representativeByRole[role];
+    matrix[role] = {};
+    for (const mod of org.modules || []) {
+      let level = "none";
+      for (const candidate of ACCESS_LEVELS) {
+        const result = await client.check(storeId, modelId, {
+          user: `employee:${rep.id}`,
+          relation: candidate,
+          object: `module:${mod.id}`,
+        });
+        if (result.allowed) {
+          level = candidate;
+          break;
+        }
+      }
+      matrix[role][mod.id] = level;
+    }
+  }
+  return matrix;
+}
 
 async function ensureSeeded() {
   for (let attempt = 1; attempt <= 20; attempt++) {
@@ -204,8 +238,21 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, storeId, modelId, openfgaApiUrl: OPENFGA_API_URL });
 });
 
+app.get("/api/modules", (req, res) => {
+  res.json(
+    (org.modules || []).map((m) => ({ id: m.id, name: m.name, description: m.description, common: !!m.common }))
+  );
+});
+
+app.get("/api/permissions-matrix", (req, res) => {
+  if (!permissionsMatrix) return res.status(503).json({ error: "matrix not ready yet" });
+  res.json({ roles: org.roles, modules: (org.modules || []).map((m) => m.id), matrix: permissionsMatrix });
+});
+
 ensureSeeded()
-  .then(() => {
+  .then(async () => {
+    permissionsMatrix = await computePermissionsMatrix();
+    console.log(`[matrix] computed permissions matrix for ${org.roles.length} roles x ${(org.modules || []).length} modules`);
     app.listen(PORT, () => console.log(`VLS OpenFGA demo web listening on :${PORT}`));
   })
   .catch((err) => {

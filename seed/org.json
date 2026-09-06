@@ -35,5 +35,79 @@
       "roles": ["employee", "finance"]
     }
   },
-  "assumptionsNote": "The VLS spec explicitly says hr_manager's authority over 'employee' is org-wide ('all scope'). It groups finance+manager into the same hr_manager manageable-set sentence without a hierarchy caveat, so this demo also treats those as org-wide (HR authority over personnel categories, not scoped to a subtree). Director's manageable set (broad-but-not-superuser) was not fully specified by the spec; this demo assumes org-wide authority over employee+finance, excluding manager/hr_manager/director/superuser roles as targets. Both assumptions are called out here so they're easy to challenge/change."
+  "assumptionsNote": "The VLS spec explicitly says hr_manager's authority over 'employee' is org-wide ('all scope'). It groups finance+manager into the same hr_manager manageable-set sentence without a hierarchy caveat, so this demo also treats those as org-wide (HR authority over personnel categories, not scoped to a subtree). Director's manageable set (broad-but-not-superuser) was not fully specified by the spec; this demo assumes org-wide authority over employee+finance, excluding manager/hr_manager/director/superuser roles as targets. Both assumptions are called out here so they're easy to challenge/change.",
+  "modules": [
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "description": "Org-wide summary: headcount, open items, activity feed.",
+      "common": true,
+      "access": {
+        "viewer": ["founder", "admin", "director", "hr_manager", "manager", "finance", "employee"]
+      }
+    },
+    {
+      "id": "directory",
+      "name": "Directory",
+      "description": "Employee profiles and contact/org info.",
+      "common": true,
+      "access": {
+        "admin": ["founder", "admin"],
+        "editor": ["hr_manager"],
+        "viewer": ["director", "manager", "finance", "employee"]
+      }
+    },
+    {
+      "id": "documents",
+      "name": "Documents & Compliance",
+      "description": "Policies, SOPs, compliance artifacts.",
+      "common": true,
+      "access": {
+        "editor": ["founder", "admin", "hr_manager", "director"],
+        "viewer": ["manager", "finance", "employee"]
+      }
+    },
+    {
+      "id": "employees_hr",
+      "name": "Employees & HR",
+      "description": "Employee records, role assignments, onboarding/offboarding.",
+      "common": false,
+      "access": {
+        "admin": ["founder", "admin"],
+        "editor": ["hr_manager"],
+        "viewer": ["director", "manager"]
+      }
+    },
+    {
+      "id": "payroll_finance",
+      "name": "Payroll & Finance",
+      "description": "Compensation, invoices, budget.",
+      "common": false,
+      "access": {
+        "admin": ["founder", "admin"],
+        "editor": ["finance"],
+        "viewer": ["hr_manager"]
+      }
+    },
+    {
+      "id": "reports",
+      "name": "Reports & Analytics",
+      "description": "Cross-org reporting and dashboards-of-dashboards.",
+      "common": false,
+      "access": {
+        "admin": ["founder", "admin"],
+        "editor": ["director"],
+        "viewer": ["hr_manager", "manager", "finance"]
+      }
+    },
+    {
+      "id": "org_settings",
+      "name": "Org Settings",
+      "description": "Hierarchy, role definitions, security/auth config.",
+      "common": false,
+      "access": {
+        "admin": ["founder", "admin"]
+      }
+    }
+  ]
 }

@@ -231,6 +231,70 @@
           }
         }
       }
+    },
+    {
+      "type": "module",
+      "relations": {
+        "viewer": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "editor"
+                }
+              }
+            ]
+          }
+        },
+        "editor": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        },
+        "admin": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "viewer": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          },
+          "editor": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          },
+          "admin": {
+            "directly_related_user_types": [
+              {
+                "type": "role",
+                "relation": "assignee"
+              }
+            ]
+          }
+        }
+      }
     }
   ]
 }

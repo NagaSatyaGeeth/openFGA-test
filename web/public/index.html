@@ -11,88 +11,112 @@
     <h1>VLS Authority Model on OpenFGA</h1>
     <p class="subtitle">
       A real <a href="https://openfga.dev" target="_blank" rel="noopener">OpenFGA</a> server (Docker image,
-      Postgres-backed) evaluating VLS's actual authority rules. Every ALLOW/DENY below comes straight from
-      OpenFGA's <code>Check</code> API — nothing here is simulated.
+      Postgres-backed) evaluating VLS's actual authority rules and module-level permissions. Every result below
+      comes straight from OpenFGA's own <code>Check</code> API — nothing here is simulated.
     </p>
   </header>
 
   <main>
-    <section class="panel" id="scenarios-panel">
-      <h2>Preloaded scenarios</h2>
-      <div id="scenarios" class="scenario-grid">Loading…</div>
-    </section>
+    <div class="tabbar">
+      <button class="tab-btn active" data-tab="checks">Authority Checks</button>
+      <button class="tab-btn" data-tab="dashboard">Permissions Dashboard</button>
+    </div>
 
-    <section class="panel" id="builder-panel">
-      <h2>Build your own check</h2>
-      <div class="builder">
-        <label>
-          Actor
-          <select id="actor"></select>
-        </label>
-        <label>
-          Action
-          <select id="action">
-            <option value="manage">manage</option>
-            <option value="deactivate">deactivate</option>
-            <option value="change_role">change_role</option>
-            <option value="edit_hierarchy">edit_hierarchy (org-wide, no target)</option>
-          </select>
-        </label>
-        <label id="target-label">
-          Target
-          <select id="target"></select>
-        </label>
-        <label class="checkbox-row" id="guard-row" hidden>
-          <input type="checkbox" id="simulateGuard" />
-          Simulate: target is the org's <em>last</em> active superuser
-        </label>
-        <button id="runCheck">Run Check</button>
-      </div>
-      <div id="result" class="result"></div>
-    </section>
+    <div class="tab-panel active" id="tab-checks">
+      <section class="panel" id="scenarios-panel">
+        <h2>Preloaded scenarios</h2>
+        <div id="scenarios" class="scenario-grid">Loading…</div>
+      </section>
 
-    <section class="panel" id="org-panel">
-      <h2>Seeded org chart</h2>
-      <p id="assumptions" class="assumptions"></p>
-      <table id="orgTable">
-        <thead><tr><th>Employee</th><th>Role</th><th>Reports to</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
+      <section class="panel" id="builder-panel">
+        <h2>Build your own check</h2>
+        <div class="builder">
+          <label>
+            Actor
+            <select id="actor"></select>
+          </label>
+          <label>
+            Action
+            <select id="action">
+              <option value="manage">manage</option>
+              <option value="deactivate">deactivate</option>
+              <option value="change_role">change_role</option>
+              <option value="edit_hierarchy">edit_hierarchy (org-wide, no target)</option>
+            </select>
+          </label>
+          <label id="target-label">
+            Target
+            <select id="target"></select>
+          </label>
+          <label class="checkbox-row" id="guard-row" hidden>
+            <input type="checkbox" id="simulateGuard" />
+            Simulate: target is the org's <em>last</em> active superuser
+          </label>
+          <button id="runCheck">Run Check</button>
+        </div>
+        <div id="result" class="result"></div>
+      </section>
 
-    <section class="panel" id="assessment-panel">
-      <h2>Honest assessment: does OpenFGA fit VLS's authority model?</h2>
-      <div class="assessment-grid">
-        <div class="assess-col assess-clean">
-          <h3>Mapped cleanly</h3>
-          <ul>
-            <li>RBAC via role objects (founder/admin/director/hr_manager/manager/finance/employee), each a first-class object with its own tuples.</li>
-            <li>Founder-outranks-admin: pure data (which role assignee-sets get <code>superuser_access</code> on the founder role object), zero special-cased model logic.</li>
-            <li>Manageable sets (hr_manager→{employee,finance,manager}, manager→{employee}, director→{employee,finance}) as plain role→role tuples — adding/removing a manageable role is a tuple write, not a model change.</li>
-            <li>Reporting subtree (transitive, unbounded-depth reports-to) via one recursive relation definition — verified 2+ hops deep against the real server.</li>
-            <li>Org-wide vs subtree-scoped authority as an intersection (<code>subtree_role_managed AND reports_to</code>) — reads exactly like the English rule.</li>
-            <li>hr_manager/director unable to touch directors/superusers falls out for free: those roles simply never appear in their manageable-set tuples — no explicit "cannot" rule needed.</li>
-          </ul>
+      <section class="panel" id="org-panel">
+        <h2>Seeded org chart</h2>
+        <p id="assumptions" class="assumptions"></p>
+        <table id="orgTable">
+          <thead><tr><th>Employee</th><th>Role</th><th>Reports to</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="panel" id="assessment-panel">
+        <h2>Honest assessment: does OpenFGA fit VLS's authority model?</h2>
+        <div class="assessment-grid">
+          <div class="assess-col assess-clean">
+            <h3>Mapped cleanly</h3>
+            <ul>
+              <li>RBAC via role objects (founder/admin/director/hr_manager/manager/finance/employee), each a first-class object with its own tuples.</li>
+              <li>Founder-outranks-admin: pure data (which role assignee-sets get <code>superuser_access</code> on the founder role object), zero special-cased model logic.</li>
+              <li>Manageable sets (hr_manager→{employee,finance,manager}, manager→{employee}, director→{employee,finance}) as plain role→role tuples — adding/removing a manageable role is a tuple write, not a model change.</li>
+              <li>Reporting subtree (transitive, unbounded-depth reports-to) via one recursive relation definition — verified 2+ hops deep against the real server.</li>
+              <li>Org-wide vs subtree-scoped authority as an intersection (<code>subtree_role_managed AND reports_to</code>) — reads exactly like the English rule.</li>
+              <li>hr_manager/director unable to touch directors/superusers falls out for free: those roles simply never appear in their manageable-set tuples — no explicit "cannot" rule needed.</li>
+              <li>Module-level permissions (Dashboard, Payroll, Org Settings, …) as a textbook <code>admin ⊃ editor ⊃ viewer</code> level cascade — three relations, one small union chain, done. The "Permissions Dashboard" tab is generated entirely from live Checks against this.</li>
+            </ul>
+          </div>
+          <div class="assess-col assess-awkward">
+            <h3>Awkward / needed workarounds</h3>
+            <ul>
+              <li>Comparing <em>actor's</em> role against <em>target's</em> role requires two separate tuple directions per employee (<code>role</code> forward-link and <code>assignee</code> reverse-link) — double the writes for every role assignment, purely to support traversal in both directions.</li>
+              <li>Per-action relations (<code>deactivate</code>/<code>change_role</code>/<code>manage</code>) are identical aliases of one <code>can_act_on</code> relation because the spec doesn't differentiate rules per action — fine here, but if VLS ever needs different rules per action, this flattens back into real modeling work.</li>
+              <li>"Which rule decided it" isn't a native Check output — this demo issues 3 extra Check calls against sub-relations to reconstruct a human reason. OpenFGA's own answer is just true/false (Expand gives a rule tree, but it's not a friendly one-line explanation).</li>
+              <li>hr_manager/director's org-wide vs manager's subtree-only scope had to be split into two separate relations (<code>managed_org_wide_by</code> / <code>managed_subtree_by</code>) rather than one relation with a scope parameter — OpenFGA has no per-tuple "mode" flag without reaching for Conditions (ABAC).</li>
+            </ul>
+          </div>
+          <div class="assess-col assess-cant">
+            <h3>OpenFGA cannot express (needs app logic)</h3>
+            <ul>
+              <li><strong>Last-active-superuser / org-lockout guard.</strong> OpenFGA relations have no cardinality/counting primitive — no "is this the last member of set X". Demonstrated live above: OpenFGA's raw <code>Check</code> answer stays ALLOW while an app-side guard (counting active superuser tuples outside the ReBAC graph) forces the final DENY.</li>
+              <li>Any rule requiring "how many X exist" or "for all Y" (e.g. "at least one active admin must always exist", "no more than N managers per team") — same limitation, same shape of workaround.</li>
+              <li>Time-bounded or workflow-state rules (e.g. "can only reactivate within 30 days") would need OpenFGA Conditions (ABAC-lite, CEL) or app-side checks — not exercised in this spike, but worth flagging since VLS's real rules may include some.</li>
+            </ul>
+          </div>
         </div>
-        <div class="assess-col assess-awkward">
-          <h3>Awkward / needed workarounds</h3>
-          <ul>
-            <li>Comparing <em>actor's</em> role against <em>target's</em> role requires two separate tuple directions per employee (<code>role</code> forward-link and <code>assignee</code> reverse-link) — double the writes for every role assignment, purely to support traversal in both directions.</li>
-            <li>Per-action relations (<code>deactivate</code>/<code>change_role</code>/<code>manage</code>) are identical aliases of one <code>can_act_on</code> relation because the spec doesn't differentiate rules per action — fine here, but if VLS ever needs different rules per action, this flattens back into real modeling work.</li>
-            <li>"Which rule decided it" isn't a native Check output — this demo issues 3 extra Check calls against sub-relations to reconstruct a human reason. OpenFGA's own answer is just true/false (Expand gives a rule tree, but it's not a friendly one-line explanation).</li>
-            <li>hr_manager/director's org-wide vs manager's subtree-only scope had to be split into two separate relations (<code>managed_org_wide_by</code> / <code>managed_subtree_by</code>) rather than one relation with a scope parameter — OpenFGA has no per-tuple "mode" flag without reaching for Conditions (ABAC).</li>
-          </ul>
+      </section>
+    </div>
+
+    <div class="tab-panel" id="tab-dashboard">
+      <section class="panel" id="dashboard-panel">
+        <h2>Module × role permissions</h2>
+        <p class="panel-note">
+          Every cell below is a live OpenFGA <code>Check</code> against a real employee of that role — Admin implies
+          Editor implies Viewer (one cascade, not three independent grants). Modules marked <span class="common-tag">common</span>
+          are ones every role gets at least Viewer on.
+        </p>
+        <div class="module-legend" id="legend"></div>
+        <div class="matrix-scroll">
+          <table class="matrix-table" id="matrixTable"></table>
         </div>
-        <div class="assess-col assess-cant">
-          <h3>OpenFGA cannot express (needs app logic)</h3>
-          <ul>
-            <li><strong>Last-active-superuser / org-lockout guard.</strong> OpenFGA relations have no cardinality/counting primitive — no "is this the last member of set X". Demonstrated live above: OpenFGA's raw <code>Check</code> answer stays ALLOW while an app-side guard (counting active superuser tuples outside the ReBAC graph) forces the final DENY.</li>
-            <li>Any rule requiring "how many X exist" or "for all Y" (e.g. "at least one active admin must always exist", "no more than N managers per team") — same limitation, same shape of workaround needed.</li>
-            <li>Time-bounded or workflow-state rules (e.g. "can only reactivate within 30 days") would need OpenFGA Conditions (ABAC-lite, CEL) or app-side checks — not exercised in this spike, but worth flagging since VLS's real rules may include some.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
+        <div class="module-desc-grid" id="moduleCards"></div>
+      </section>
+    </div>
   </main>
 
   <script src="app.js"></script>

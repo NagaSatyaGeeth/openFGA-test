@@ -35,6 +35,16 @@ A recursive `reports_to` relation gives unbounded-depth reporting-subtree
 checks. See `model/model.fga` for the full commented DSL, and the deployed
 UI's "Honest assessment" panel for what mapped cleanly vs. what didn't.
 
+A second axis - **modules** (`type module`) - covers "what can each role touch,
+and how far": a standard `admin ⊃ editor ⊃ viewer` permission cascade, seeded
+per role in `seed/org.json`. A few modules (Dashboard, Directory, Documents &
+Compliance) are seeded **common** - every one of the 7 roles gets at least
+Viewer on them - the rest are graded per role, down to Org Settings, which
+only founder/admin can touch at all. The UI's "Permissions Dashboard" tab
+renders this as a role × module matrix, computed entirely from live OpenFGA
+`Check` calls (one representative employee per role, checked admin → editor →
+viewer, most-privileged first) rather than read off the seed file directly.
+
 ## Run it locally
 
 Requires Docker.
@@ -118,6 +128,11 @@ org-wide-vs-subtree scoping as a clean intersection that reads like the
 English rule; hr_manager/director being unable to touch directors/superusers
 falls out for free (those roles just never appear in their manageable-set
 tuples).
+
+Module-level RBAC (Dashboard/Payroll/Org Settings/…) also mapped cleanly: one
+`admin ⊃ editor ⊃ viewer` cascade (three relations, two `or`s) covers every
+module, and "common to all roles" is just a seed-data property (grant Viewer
+to all 7 roles), not a model construct.
 
 **Awkward / needed workarounds** — every employee needs tuples in *both*
 directions (role→employee and employee→role) purely to support traversal

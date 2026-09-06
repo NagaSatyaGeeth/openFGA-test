@@ -88,3 +88,20 @@ type role
 type org
   relations
     define hierarchy_editor: [role#assignee]
+
+# ---------------------------------------------------------------------------
+# type: module
+#
+# A VLS Suite feature area (Dashboard, Directory, Payroll, Org Settings, ...).
+# This is the second axis the "Permissions Dashboard" renders: not "who can
+# act on whom" but "what can each role touch, and how far" - a standard
+# level-cascade RBAC pattern (admin implies editor implies viewer), seeded
+# per-role in seed/org.json. A handful of modules are seeded as "common":
+# every role gets at least viewer on them, same mechanism as any other
+# grant - "common" is a seed-data property, not a model construct.
+# ---------------------------------------------------------------------------
+type module
+  relations
+    define viewer: [role#assignee] or editor
+    define editor: [role#assignee] or admin
+    define admin: [role#assignee]
