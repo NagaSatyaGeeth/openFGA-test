@@ -1,0 +1,79 @@
+# Render Blueprint — one-click deploy of the whole stack on the free tier.
+# Provisions: free Postgres + OpenFGA server (official Docker image) + the app.
+# See README.md for the phone walkthrough.
+#
+# Note: the OpenFGA preshared key is a fixed literal shared by both services
+# below (not a generated per-blueprint secret). Render's blueprint validator
+# rejects service-level env-var-group references, which is the only way to
+# share a *generated* secret across services — so for this throwaway demo we
+# use a known literal instead. It only needs both services to agree; there is
+# no real data to protect here.
+
+databases:
+  - name: openfga-rbac-db
+    plan: free
+    databaseName: openfga
+    user: openfga
+
+services:
+  # 1) OpenFGA server. Built from openfga/Dockerfile (a thin wrapper over the
+  #    official image) so it runs "migrate" then "run" at startup - Render's
+  #    free tier does not allow a preDeployCommand for the migration step.
+  - name: openfga-server
+    type: web
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./openfga/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      # OpenFGA opens 3 ports (2112 metrics, 8080 HTTP API, 8081 gRPC). Render
+      # otherwise auto-picks the metrics port as "primary" and routes health
+      # checks + private traffic there. Pin the primary port to the HTTP API
+      # (8080) and turn the metrics server off so it isn't in the running.
+      - key: PORT
+        value: "8080"
+      - key: OPENFGA_METRICS_ENABLED
+        value: "false"
+      - key: OPENFGA_HTTP_ADDR
+        value: "0.0.0.0:8080"
+      - key: OPENFGA_DATASTORE_ENGINE
+        value: postgres
+      - key: OPENFGA_DATASTORE_URI
+        fromDatabase: { name: openfga-rbac-db, property: connectionString }
+      - key: OPENFGA_PLAYGROUND_ENABLED
+        value: "false"
+      - key: OPENFGA_AUTHN_METHOD
+        value: preshared
+      - key: OPENFGA_AUTHN_PRESHARED_KEYS
+        value: openfga-demo-preshared-key-2026
+
+  # 2) The demo app (backend + frontend). Calls the OpenFGA server over its
+  #    PUBLIC URL rather than Render's private network: private service-to-
+  #    service DNS proved unreliable on the free tier (ENOTFOUND openfga-server),
+  #    and the app boots resiliently (see server.js) so a cold server never
+  #    crashes it. The server is still protected by the preshared key below.
+  - name: openfga-rbac-app
+    type: web
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "4000"
+      # If Render assigned the server a suffixed URL, change this to match the
+      # openfga-server service's real .onrender.com URL (shown on its page).
+      - key: OPENFGA_API_URL
+        value: https://openfga-server.onrender.com
+      - key: OPENFGA_API_KEY
+        value: openfga-demo-preshared-key-2026
+      - key: OPENFGA_STORE_NAME
+        value: openfga-rbac-demo
+      - key: APP_DATABASE_URL
+        fromDatabase: { name: openfga-rbac-db, property: connectionString }
+      - key: SESSION_SECRET
+        generateValue: true

@@ -1,0 +1,51 @@
+# Local dev stack: Postgres + OpenFGA + the app, all real.
+#   docker compose up -d --build   then open http://localhost:4000
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openfga
+      POSTGRES_PASSWORD: openfga
+      POSTGRES_DB: openfga
+    ports: ["5433:5432"]
+    volumes: ["pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openfga"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  openfga-migrate:
+    image: ghcr.io/openfga/openfga:latest
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: "postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable"
+
+  openfga:
+    image: ghcr.io/openfga/openfga:latest
+    depends_on:
+      openfga-migrate: { condition: service_completed_successfully }
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: "postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable"
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: "local-demo-key"
+    ports: ["8081:8080"]
+
+  web:
+    build: { context: ., dockerfile: Dockerfile }
+    depends_on: ["openfga"]
+    environment:
+      PORT: "4000"
+      OPENFGA_API_URL: "http://openfga:8080"
+      OPENFGA_API_KEY: "local-demo-key"
+      APP_DATABASE_URL: "postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable"
+      SESSION_SECRET: "local-dev-secret"
+    ports: ["4000:4000"]
+
+volumes:
+  pg:

@@ -1,0 +1,53 @@
+model
+  schema 1.1
+
+# ===========================================================================
+# OpenFGA RBAC evaluation model
+#
+# Design goals (the two mistakes from the earlier spike, deliberately avoided):
+#
+#   * Every module-access relation accepts BOTH an individual `user` AND a
+#     `role#assignee` userset - so one tuple can grant access to a whole role
+#     OR to a single specific person, mixed freely in the same relation. This
+#     is the idiomatic OpenFGA pattern for "role-based grants with per-user
+#     overrides". Effective access is simply the union, computed by OpenFGA.
+#
+#   * Nothing here is cached at app boot. The app does LIVE Check calls, so a
+#     tuple written a millisecond ago is visible on the very next request.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# user: an actor. Every login and every employee is a user:<id>.
+# The reporting hierarchy lives here (reports-to), so authority-style checks
+# ("does A manage B, directly or transitively?") can be added later.
+# ---------------------------------------------------------------------------
+type user
+  relations
+    # Direct reports-to edge: user:<manager> is the manager of this user.
+    define manager: [user]
+    # Transitive closure: true for the direct manager and every manager above.
+    define reports_to: manager or reports_to from manager
+
+# ---------------------------------------------------------------------------
+# role: a named role (role:admin, role:finance_manager, ...). Users become
+# members by being listed as `assignee`. A role grants module access by
+# appearing (as role:<id>#assignee) in a module's viewer/editor/approver.
+# ---------------------------------------------------------------------------
+type role
+  relations
+    define assignee: [user]
+
+# ---------------------------------------------------------------------------
+# module: a feature area (module:invoices, module:payroll, ...).
+#
+# Three access levels, cascading most-privileged -> least:
+#   approver  ==>  editor  ==>  viewer
+# so an approver is automatically an editor and a viewer, an editor is
+# automatically a viewer. Each level is grantable to either an individual
+# user or a whole role's assignees.
+# ---------------------------------------------------------------------------
+type module
+  relations
+    define approver: [user, role#assignee]
+    define editor: [user, role#assignee] or approver
+    define viewer: [user, role#assignee] or editor
